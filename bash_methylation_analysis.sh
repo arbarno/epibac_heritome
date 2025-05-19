@@ -77,7 +77,7 @@ for BED in *.10x.pileup.bed.sorted; do
     bedtools intersect -a ${BED} -b common_positions.bed > ${SAMPLE_NAME}.filtered.pileup.bed
 done
 
-# ---- The following steps use python scripts found here: https://github.com/arbarno/epibac_heritome ----
+# ---- The following steps use python scripts found here: https://github.com/arbarno/epibac_heritome/tree/main/python_scripts ----
 
 # Merge filtered pileup files to create a single file with compiled methylation data
 # python v3.11.0
