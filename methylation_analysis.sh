@@ -98,7 +98,7 @@ done
 
 # Calculate CpG bias
 # python v3.11.0
-calc_cpg_bias.py ${REF_ASSEMBLY} ${REF_GFF} > /ibex/project/c2208/nanopore/output/agland_cpg_bias.tsv
+calc_cpg_bias.py ${REF_ASSEMBLY} ${REF_GFF} > /ibex/project/c2208/nanopore/output/acropora_cpg_bias.tsv
 
 # Calculate mean methylation per sample
 # python v3.11.0
