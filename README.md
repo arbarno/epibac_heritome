@@ -17,3 +17,5 @@ The pipeline to create the reference assembly used in this manuscript can be fou
   - The python scripts used at the end of the bash analysis
 - `output`
   - Output files generated from the bash pipeline
+- `ref_files`
+  - Files related to the Acropora reference genome assembled for this study
