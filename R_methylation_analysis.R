@@ -160,9 +160,6 @@ for (m in mult_files) {
   gene_id_to_go = readMappings(file=annot_filename)
 
   # shrink list of all GO terms down to the correct universe
-  #universe_file = gsub('up', 'universe', m)
-  #universe_file = gsub('down', 'universe', universe_file)
-  #universe_file = gsub('diff', 'universe', universe_file)
   universe_genes = scan(paste0(folder_of_interest, universe_file), character(0), sep="\n")
   
   gene_id_to_go = gene_id_to_go[universe_genes]
