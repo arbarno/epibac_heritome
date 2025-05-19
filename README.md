@@ -7,10 +7,13 @@ This repository contains the scripts (or references to scripts) and input files 
 The pipeline to create the reference assembly used in this manuscript can be found here: https://github.com/arbarno/DNA-methylation
 
 ### The files in the main repository (and how they were obtained):
-
+- `bash_methylation_analysis.sh`
+  - Contains the bash pipeline used to extract the methylation info, resulting in the output files in the output/ folder
+- `R_methylation_analysis.R`
+  - Contains the R pipeline used to further analyze and visualize the results from the output files generated from the bash pipeline
 
 ### The folders in the main repository:
-- `methylation_analysis`
-  - Contains 
-- `Rscripts`
-  - Contains the R pipeline used to further analyze and visualize the results from this study
+- `python_scripts`
+  - The python scripts used at the end of the bash analysis
+- `output`
+  - Output files generated from the bash pipeline
