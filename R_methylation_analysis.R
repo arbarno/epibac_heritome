@@ -202,9 +202,10 @@ for (m in mult_files) {
 }
 #
 
-## NanoMethViz to visualize methylation levels across a ROI ----
+## Reduce and visualize GO terms with rrvgo ----
 
-# adapted from https://www.bioconductor.org/packages/release/bioc/vignettes/NanoMethViz/inst/doc/UsersGuide.html
+# https://github.com/ssayols/rrvgo
+# http://revigo.irb.hr/
 
 library(rrvgo) # v1.20.0
 library(org.Ce.eg.db) # v3.21.0
