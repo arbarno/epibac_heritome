@@ -28,6 +28,23 @@ for PILEUP in *.traditional.pileup.bed; do
     awk '$5 >= 10' "${PILEUP}" > "${SAMPLE_NAME}.10x.pileup.bed"
 done
 
+# Filter out positions that are not conserved with clair3
+# clair3 v2.0.2 (https://github.com/HKU-BAL/clair3)
+conda activate clair3
+for BED in *.10x.pileup.bed; do
+    SAMPLE_NAME=$(basename "${BED}" .10x.pileup.bed)
+    run_clair3.sh \
+        --bam_fn="${SAMPLE_NAME}.bam" \
+        --ref_fn="${REF_ASSEMBLY}" \
+        --threads=16 \
+        --platform=ont \
+        --model_path="${CONDA_PREFIX}/bin/models/r1041_e82_400bps_sup_v420" \
+        --include_all_ctgs \
+        --bed_fn="${BED}" \
+        --output="${SAMPLE_NAME}_clair3"
+done
+conda deactivate
+
 # Sort filtered pileup files
 # bedtools v2.30.0 (https://bedtools.readthedocs.io/en/latest/index.html)
 for BED in *.10x.pileup.bed; do
