@@ -34,7 +34,7 @@ conda activate clair3
 for BED in *.10x.pileup.bed; do
     SAMPLE_NAME=$(basename "${BED}" .10x.pileup.bed)
     run_clair3.sh \
-        --bam_fn="${SAMPLE_NAME}.bam" \
+        --bam_fn="${SAMPLE_NAME}.aligned.bam" \
         --ref_fn="${REF_ASSEMBLY}" \
         --threads=16 \
         --platform=ont \
