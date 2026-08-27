@@ -107,53 +107,40 @@ bic_mix #[1] -471.9421
 library(dplyr) # v1.2.1
 library(ggplot2) # v4.0.3
 
-# read in median methylation tsv file
-mean.meths <- read.table("merged_mean_meths.tsv", sep = '\t', header = TRUE)
-gene_universe <- read.delim("gene_universe.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+# read in weighted mean methylation tsv file
+weighted.avgs <- read.table("gene_level_counts.tsv", sep = '\t', header = TRUE)
+gene.universe <- read.delim("gene_universe_conserved_3CpGs.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
 
 # retain genes that passed filtering steps
-mean.meths.f <- mean.meths %>%
-  filter(!grepl("^tRNA", gene)) %>% # 23960 genes
-  filter(meth_pos >= 3) %>%
-  select(-meth_pos) %>%filter(gene %in% gene_universe) # 10883 genes
-
-# Get aggregated percents for each gene (19831 total genes)
-merged <- mean.meths.f %>%
-  select(gene, merged)
+merged <- weighted.avgs %>%
+  filter(gene %in% gene.universe) %>% # 10763 genes passing threshold
+  group_by(gene) %>%
+  summarize(gene_avg = (sum(methylated_count)/sum(total_count) * 100), .groups = "drop") # adds all methylated counts/total counts
 
 # Read the list of genes from the first column of the tab-separated file
-gene_list <- read.delim("cpg_all_genes.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
-high_genes <- read.delim("cpg_high_genes.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
-low_genes  <- read.delim("cpg_low_genes.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+high <- read.delim("highcpg_genes.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+low  <- read.delim("lowcpg_genes.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
 
 # Filter just genes present in gene_list (23946 genes in gene list)
-alls <- mean.meths.f %>%
-  filter(gene %in% gene_list) %>%
+alls <- merged %>%
+  filter(gene %in% gene.universe) %>%
   mutate(high_low = case_when(
-    gene %in% high_genes ~ "high_cpg", # 16138 genes
-    gene %in% low_genes  ~ "low_cpg", # 7808 genes
+    gene %in% high ~ "high_cpg", # 8760 genes
+    gene %in% low  ~ "low_cpg", # 1997 genes
     TRUE ~ NA_character_  # if not present in either list
-  ))
+  )) %>%
+  filter(!is.na(high_low)) # only 6 genes removed
+table(alls$high_low) # to get the number of genes in each group
 
-write.table(alls$gene, file = "filtered_gene_universe.txt", row.names = FALSE, col.names = FALSE, quote = FALSE)
-# alls results in 10877 genes
-high <- alls %>%
-  filter(high_low == 'high_cpg') # 8791 genes
-write.table(high$gene, file = "filtered_highcpg_genes.txt", row.names = FALSE, col.names = FALSE, quote = FALSE)
-low <- alls %>%
-  filter(high_low == 'low_cpg') # 2086 genes
-write.table(low$gene, file = "filtered_lowcpg_genes.txt", row.names = FALSE, col.names = FALSE, quote = FALSE)
-
-# Plot boxplot of methylation of CpGs
-box_plot <- ggplot(alls, aes(x = factor(high_low, levels = c("low_cpg", "high_cpg")), y = merged)) +
-  geom_boxplot(aes(fill=high_low), colour= "black", lwd=0.2, fatten = 0.5, outliers = FALSE) +
+# Plot boxplot of methylation of high/low CpGs
+box_plot <- ggplot(alls, aes(x = factor(high_low, levels = c("low_cpg", "high_cpg")), y = gene_avg)) +
+  geom_boxplot(aes(fill = high_low), colour = "black", linewidth = 0.2, fatten = 0.5, outlier.shape = NA) +
   theme_classic() +
-  theme(axis.title.x = element_blank()) +
-  labs(y="Methylation (%)") +
-  scale_x_discrete(labels=c(expression("Low CpG"[O/E], "High CpG"[O/E]))) +
+  labs(x = NULL, y = "Methylation (%)") +
+  scale_x_discrete(labels = c(expression("Low CpG"[O/E]), expression("High CpG"[O/E]))) +
   scale_fill_manual(values = c("low_cpg" = "blue", "high_cpg" = "red")) +  
-  theme(axis.line = element_line(colour = "black"), panel.grid.major = element_blank(),panel.grid.minor=element_blank(), panel.border = element_blank()) +
-  theme(axis.text=element_text(size=12, family = "sans", colour = "black"),axis.title=element_text(size=12, family = "sans", colour = "black")) +
+  theme(axis.line = element_line(colour = "black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_blank()) +
+  theme(axis.text = element_text(size = 12, family = "sans", colour = "black"), axis.title = element_text(size = 12, family = "sans", colour = "black")) +
   theme(legend.position="none")
 box_plot
 
