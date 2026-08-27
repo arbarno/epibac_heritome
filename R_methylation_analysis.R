@@ -1,5 +1,21 @@
 ## Methylation analysis of Acropora spawning nanopore data ##
 
+## Create universal gene universe file with minimum CpG >= 3 in all samples ----
+
+# read in files with gene methylation data
+gene.counts <- read.table("gene_level_counts.tsv", sep = '\t', header = TRUE)
+
+library(dplyr) # v1.2.1
+
+filtered.genes <- gene.counts %>%
+  group_by(gene) %>%
+  summarise(min_n_cpgs = min(n_cpgs), n_samples_present = n(), .groups = "drop") %>%
+  filter(min_n_cpgs >= 3, n_samples_present == 12, !grepl("intergenic|no_info", gene)) %>%
+  distinct(gene)
+
+write.table(filtered.genes$gene, file = "gene_universe_conserved_3CpGs.txt", row.names = FALSE, col.names = FALSE, quote = FALSE)
+# 10763 genes
+
 ## Plotting CpG O/E from Acropora reference ----
 
 # adapted from https://github.com/jldimond/Coral-CpG/blob/master/analyses/scripts/CpG_Density.R
@@ -8,12 +24,12 @@ acro_cpg <-read.delim("acropora_ref_cpg_bias.tsv", header=TRUE)
 
 #Fitting mixture model with mixtools normalmixEM
 library(mixtools) # v2.0.0.1
-library(ggplot2) # v3.5.1
-library(dplyr) # v1.1.4
+library(ggplot2) # v4.0.3
+library(dplyr) # v1.2.1
 
 cpg_data <- acro_cpg %>%
   filter(!grepl("^tRNA", gene)) %>%
-  filter(cpg_bias >= 0.001 & cpg_bias <= 1.5) %>% #Cutting off high and low values (high value just cuts off 10 genes)
+  filter(cpg_bias >= 0.001 & cpg_bias <= 1.5) %>% #Cutting off high and low values (high value just cuts off 8 genes)
   select(gene, cpg_bias)
 # 23946 genes passed filtration
 
@@ -21,6 +37,7 @@ cpg_data$cpg_bias <- as.numeric(cpg_data$cpg_bias)
 
 set.seed(1)
 mix.model <- normalmixEM(cpg_data$cpg_bias, k = 2)
+# number of iterations= 232
 
 mix.model[["mu"]] #means
 ## [1] 0.4369254 0.8418351
@@ -28,9 +45,6 @@ mix.model[["sigma"]] #standard deviations
 ## [1] 0.1351937 0.1688484
 mix.model[["lambda"]] #amplitudes
 ## [1] 0.3252951 0.6747049
-
-plot(mix.model, which = 2, col2 = c("red", "blue"), xlab2 = "CpG O/E", ylab2 = "Density", main2 = "")
-abline(v = 0.588, lty = 2, col = "grey30", lwd = 1.5)
 
 #Finds intersection point of two component model
 intersect <- function(m1, s1, m2, s2, prop1, prop2){
@@ -45,16 +59,24 @@ model_intersect <- intersect(0.4369254, 0.1351937,
                              0.3252951, 0.6747049)
 # Intersect is at 0.588
 
+plot(mix.model, which = 2, col2 = c("red", "blue"), xlab2 = "CpG O/E", ylab2 = "Density", main2 = "")
+abline(v = 0.588, lty = 2, col = "grey30", lwd = 1.5)
+
 # get median CpG O/E value of genes
 median(cpg_data$cpg_bias, na.rm = TRUE) # [1] 0.7372
-
 # number of genes in high CpG O/E component
 sum(cpg_data$cpg_bias > 0.588) # [1] 16138
+high <- cpg_data %>%
+  filter(cpg_bias > 0.588)
+write.table(high$gene, file = "highcpg_genes.txt", row.names = FALSE, col.names = FALSE, quote = FALSE)
 # number of genes in low CpG O/E component
 sum(cpg_data$cpg_bias < 0.588) # [1] 7808
+low <- cpg_data %>%
+  filter(cpg_bias > 0.588)
+write.table(low$gene, file = "lowcpg_genes.txt", row.names = FALSE, col.names = FALSE, quote = FALSE)
 
 #Test fit of single component model and compare
-null.model <- MASS::fitdistr(cpg_data$CpG_bias, "normal")
+null.model <- MASS::fitdistr(cpg_data$cpg_bias, "normal")
 
 loglik.null <- null.model$loglik
 loglik.mix <- mix.model$loglik
@@ -82,8 +104,8 @@ bic_mix #[1] -471.9421
 
 ## Comparing methylation percents across of low/high CpG O/E ----
 
-library(dplyr) # v1.1.4
-library(ggplot2) # v3.5.1
+library(dplyr) # v1.2.1
+library(ggplot2) # v4.0.3
 
 # read in median methylation tsv file
 mean.meths <- read.table("merged_mean_meths.tsv", sep = '\t', header = TRUE)
