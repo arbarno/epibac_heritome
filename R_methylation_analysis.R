@@ -147,18 +147,17 @@ box_plot
 ggsave("methylation_highlow_boxplot.pdf", plot = box_plot, width = 4, height = 3)
 
 # Statistics comparing the high/low CpG O/E
-hist(alls$merged) # not normal, many zeros
-wilcox.test(merged ~ high_low, data = alls, conf.int = T) # W = 4658576, p-value < 2.2e-16
-t.test(x = alls$merged) # t = 42.991, df = 10876, p-value < 2.2e-16
+hist(alls$gene_avg) # not normal, many zeros
+wilcox.test(gene_avg ~ high_low, data = alls, conf.int = T) # W = 4635151, p-value < 2.2e-16
 #
 
 ## topGO consider universe ----
 
 # change this folder to point to your own "go_annot" folder
-library(topGO) # v2.58.0
+library(topGO) # v2.62.0
 
 # remember to change the folder name to point to the folder containing your genes of interest lists
-folder_of_interest = "topGO/"
+folder_of_interest = "cpgs/"
 
 # exclude files with "universe" in it
 mult_files = grep(list.files(folder_of_interest), pattern="*genes.txt", value = T)
@@ -205,7 +204,7 @@ for (m in mult_files) {
     }
     
     # write it out into a file for python post-processing
-    output_filename = paste0("topGO/", go_category, "_", m)
+    output_filename = paste0("cpgs/", go_category, "_", m)
     write.table(results_table, file=output_filename, quote=FALSE, sep='\t')
   }
 }
@@ -220,7 +219,7 @@ library(rrvgo) # v1.20.0
 library(org.Ce.eg.db) # v3.21.0
 
 # Import the go terms data
-l.go_analysis <- read.delim("bp_filtered_lowcpg_genes.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+l.go_analysis <- read.delim("bp_lowcpg_genes.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
 
 # Perform the similarity matrix (using C elegans, from H Putnam)
 l.simMatrix <- calculateSimMatrix(l.go_analysis$GO.ID,
@@ -244,7 +243,7 @@ treemapPlot(l.reducedTerms)
 dev.off()
 
 # Import the go terms data
-h.go_analysis <- read.delim("bp_filtered_highcpg_genes.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+h.go_analysis <- read.delim("bp_highcpg_genes.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
 
 # Perform the similarity matrix (using C elegans, from H Putnam)
 h.simMatrix <- calculateSimMatrix(h.go_analysis$GO.ID,
@@ -268,212 +267,72 @@ treemapPlot(h.reducedTerms)
 dev.off()
 #
 
-## Boxplots of methylation levels for low & high CpG O/E ----
-
-library(dplyr) # v1.1.4
-library(ggplot2) # v3.5.1
-library(tidyr) # v1.3.1
-library(tibble) # v3.2.1
-library(data.table) # v1.17.0
-
-## Low CpG O/E genes
-
-# read in percent methylation tsv file
-filt_pcts <- fread("all_filt_pct_context.tsv.gz", sep = '\t', header = TRUE)
-gene_list <- read.delim("cpg_all_genes.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
-high_genes <- read.delim("cpg_high_genes.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
-low_genes  <- read.delim("cpg_low_genes.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
-
-# Apply filter functions to just the low CpG O/E genes
-lows <- filt_pcts %>%
-  filter(gene %in% low_genes) %>% # 35745 positions
-  select(gene, nb22:sc5) %>%
-  pivot_longer(-'gene', names_to = 'sample', values_to = 'meth_pct') %>%
-  mutate(group = case_when(startsWith(sample, 'nb') ~ 'bmc_parent', startsWith(sample, 'nc') ~ 'placebo_parent', startsWith(sample, 'sb') ~ 'bmc_sperm', startsWith(sample, 'sc') ~ 'placebo_sperm')) %>%
-  select(sample, group, everything() )%>%
-  group_by(sample, group) %>%
-  summarise(means = mean(meth_pct))
-
-# Plot boxplot of methylation of low CpGs
-lowcpg_plot <- ggplot(lows, aes(x = factor(group, levels = c("placebo_parent", "bmc_parent", "placebo_sperm", "bmc_sperm")), y = means)) +
-  geom_boxplot(aes(fill=group), colour= "black", lwd=0.5) +
-  labs(y="Methylation (%)") +
-  scale_x_discrete(labels=c(expression("Placebo Parent", "Probiotic Parent", "Placebo Sperm", "Probiotic Sperm"))) +
-  scale_fill_manual(values=c("blue", "blue", "blue", "blue")) +  
-  theme_classic() +
-  theme(axis.title.x = element_blank()) +
-  theme(axis.line = element_line(colour = "black"), panel.grid.major = element_blank(),panel.grid.minor=element_blank(), panel.border = element_blank()) +
-  theme(axis.text=element_text(size=14, family = "sans", colour = "black"),axis.title=element_text(size=14, family = "sans", colour = "black")) +
-  theme(legend.position="none")
-lowcpg_plot
-
-ggsave("lowcpg_methylation_plot.pdf", plot = lowcpg_plot, width = 8, height = 6)
-
-# stats
-hist(lows$means)
-shapiro.test(lows$means) # W = 0.7228, p-value = 0.00141
-kruskal.test(lows$means, lows$group) 
-#Kruskal-Wallis chi-squared = 9.359, df = 3, p-value = 0.02488
-FSA::dunnTest(lows$means ~ lows$group, method="bh")
-#                       Comparison          Z     P.unadj      P.adj
-# 1         bmc_parent - bmc_sperm -2.6042372 0.009207901 0.05524741
-# 2    bmc_parent - placebo_parent -1.0190493 0.308179547 0.36981546
-# 3     bmc_sperm - placebo_parent  1.5851878 0.112923661 0.22584732
-# 4     bmc_parent - placebo_sperm -2.4910095 0.012738072 0.03821422
-# 5      bmc_sperm - placebo_sperm  0.1132277 0.909850033 0.90985003
-# 6 placebo_parent - placebo_sperm -1.4719601 0.141031641 0.21154746
-
-#--
-
-## high CpG O/E genes
-
-# Apply filter functions to just the high CpG O/E genes
-highs <- filt_pcts %>%
-  filter(gene %in% high_genes) %>% # 410127 positions
-  select(gene, nb22:sc5) %>%
-  pivot_longer(-'gene', names_to = 'sample', values_to = 'meth_pct') %>%
-  mutate(group = case_when(startsWith(sample, 'nb') ~ 'bmc_parent', startsWith(sample, 'nc') ~ 'placebo_parent', startsWith(sample, 'sb') ~ 'bmc_sperm', startsWith(sample, 'sc') ~ 'placebo_sperm')) %>%
-  select(sample, group, everything()) %>%
-  group_by(sample, group) %>%
-  summarise(means = mean(meth_pct))
-
-# Plot boxplot of methylation of high CpGs
-highcpg_plot <- ggplot(highs, aes(x = factor(group, levels = c("placebo_parent", "bmc_parent", "placebo_sperm", "bmc_sperm")), y = means)) +
-  geom_boxplot(aes(fill=group), colour= "black", lwd=0.5) +
-  labs(y="Methylation (%)") +
-  scale_x_discrete(labels=c(expression("Placebo Parent", "Probiotic Parent", "Placebo Sperm", "Probiotic Sperm"))) +
-  scale_fill_manual(values=c("red", "red", "red", "red")) +  
-  theme_classic() +
-  theme(axis.title.x = element_blank()) +
-  theme(axis.line = element_line(colour = "black"), panel.grid.major = element_blank(),panel.grid.minor=element_blank(), panel.border = element_blank()) +
-  theme(axis.text=element_text(size=14, family = "sans", colour = "black"),axis.title=element_text(size=14, family = "sans", colour = "black")) +
-  theme(legend.position="none")
-highcpg_plot
-
-ggsave("highcpg_methylation_plot.pdf", plot = highcpg_plot, width = 8, height = 6)
-
-# stats
-hist(highs$means)
-shapiro.test(highs$means) # W = 0.78344, p-value = 0.006111
-kruskal.test(highs$means,highs$group) 
-#Kruskal-Wallis chi-squared = 8.7436, df = 3, p-value = 0.0329
-FSA::dunnTest(highs$means ~ highs$group, method="bh")
-#                       Comparison          Z    P.unadj      P.adj
-# 1         bmc_parent - bmc_sperm -2.4910095 0.01273807 0.07642843
-# 2    bmc_parent - placebo_parent -0.5661385 0.57129962 0.68555955
-# 3     bmc_sperm - placebo_parent  1.9248710 0.05424550 0.10849101
-# 4     bmc_parent - placebo_sperm -2.1513264 0.03145045 0.09435135
-# 5      bmc_sperm - placebo_sperm  0.3396831 0.73409518 0.73409518
-# 6 placebo_parent - placebo_sperm -1.5851878 0.11292366 0.16938549
-
-#--
-
-## total genes methylation
-
-# Apply filter functions to just the CpG O/E genes
-tots <- filt_pcts %>%
-  filter(gene %in% gene_list) %>% # 445870 positions of a total 446080 positions
-  select(gene, nb22:sc5) %>%
-  pivot_longer(-'gene', names_to = 'sample', values_to = 'meth_pct') %>%
-  mutate(group = case_when(startsWith(sample, 'nb') ~ 'bmc_parent', startsWith(sample, 'nc') ~ 'placebo_parent', startsWith(sample, 'sb') ~ 'bmc_sperm', startsWith(sample, 'sc') ~ 'placebo_sperm')) %>%
-  select(sample, group, everything()) %>%
-  group_by(sample, group) %>%
-  summarise(means = mean(meth_pct))
-
-# Plot boxplot of methylation of all genes
-meth_plot <- ggplot(tots, aes(x = factor(group, levels = c("placebo_parent", "bmc_parent", "placebo_sperm", "bmc_sperm")), y = means)) +
-  geom_boxplot(aes(fill=group), colour= "black", lwd=0.5) +
-  labs(y="Methylation (%)") +
-  scale_x_discrete(labels=c(expression("Placebo Parent", "Probiotic Parent", "Placebo Sperm", "Probiotic Sperm"))) +
-  scale_fill_manual(values=c("grey", "grey", "grey", "grey")) +  
-  theme_classic() +
-  theme(axis.title.x = element_blank()) +
-  theme(axis.line = element_line(colour = "black"), panel.grid.major = element_blank(),panel.grid.minor=element_blank(), panel.border = element_blank()) +
-  theme(axis.text=element_text(size=14, family = "sans", colour = "black"),axis.title=element_text(size=14, family = "sans", colour = "black")) +
-  theme(legend.position="none")
-meth_plot
-
-ggsave("methylation_plot.pdf", plot = meth_plot, width = 8, height = 6)
-
-# stats
-hist(tots$means)
-shapiro.test(tots$means) # W = 0.75136, p-value = 0.002761
-kruskal.test(tots$means,tots$group) 
-#Kruskal-Wallis chi-squared = 9.359, df = 3, p-value = 0.02488
-FSA::dunnTest(tots$means ~ tots$group, method="bh")
-#                                 Comparison          Z     P.unadj      P.adj
-# 1                   bmc_parent - bmc_sperm -2.6042372 0.009207901 0.05524741
-# 2              bmc_parent - placebo_parent -1.0190493 0.308179547 0.36981546
-# 3               bmc_sperm - placebo_parent  1.5851878 0.112923661 0.22584732
-# 4               bmc_parent - placebo_sperm -2.4910095 0.012738072 0.03821422
-# 5                bmc_sperm - placebo_sperm  0.1132277 0.909850033 0.90985003
-# 6           placebo_parent - placebo_sperm -1.4719601 0.141031641 0.21154746
-#
-
 ## Genome context of methylation ----
 
-library(dplyr) # v1.1.4
-library(data.table) # v1.17.0
+library(dplyr) # v1.2.1
+library(data.table) # v1.18.4
 
-df<-fread("merged_bed_annotated.bed.gz", sep = '\t', header=FALSE, fill = 14)
-head(df)
+bed <-fread("merged_clair3_bed_annotated.bed", sep = '\t', header=FALSE, fill = 14)
+head(bed)
 
-df$V5 <- as.numeric(df$V5) # CpG methylated
-df$V6 <- as.numeric(df$V6) # unmethylated
+bed$V5 <- as.numeric(bed$V5) # CpG methylated
+bed$V6 <- as.numeric(bed$V6) # unmethylated
 
-total_meth <- sum(df$V5, na.rm = TRUE) # 43546365
-total_unmeth <- sum(df$V6, na.rm = TRUE) # 593856473
-# total percent = 6.83%
+total_meth <- sum(bed$V5, na.rm = TRUE) # 39097652
+total_unmeth <- sum(bed$V6, na.rm = TRUE) # 584146003
+# total percent = 6.27%
 
-intergenic <- df %>%
+intergenic <- bed %>%
   filter(V7 == "intergenic") %>%
-  mutate(intergenic_meth = sum(V5), na.rm = TRUE) %>% # intergenic_meth = 34717180
-  mutate(intergenic_unmeth = sum(V6), na.rm = TRUE) %>% # intergenic_unmeth = 468446942
-  select(V7, intergenic_meth, intergenic_unmeth) %>%
-  slice(1)
-# intergenic percent = 6.90%
+  mutate(intergenic_meth = sum(V5), na.rm = TRUE) %>% # intergenic_meth = 31205812
+  mutate(intergenic_unmeth = sum(V6), na.rm = TRUE) %>% # intergenic_unmeth = 459285313
+  dplyr::select(V7, intergenic_meth, intergenic_unmeth) %>%
+  .[!duplicated(.), ]
+# intergenic percent = 6.36%
 
-exons <- df %>%
+exons <- bed %>%
   filter(startsWith(V11, "Exon")) %>%
-  mutate(exon_meth = sum(V5), na.rm = TRUE) %>% # inter_meth = 4678535
-  mutate(exon_unmeth = sum(V6), na.rm = TRUE) %>% # inter_unmeth = 51882513
-  select(V11, exon_meth, exon_unmeth) %>%
-  slice(1)
-# exon percent = 8.27%
+  mutate(exon_meth = sum(V5), na.rm = TRUE) %>% # exon_meth = 4236771
+  mutate(exon_unmeth = sum(V6), na.rm = TRUE) %>% # exon_unmeth = 53141674
+  dplyr::select(V11, exon_meth, exon_unmeth) %>%
+  .[!duplicated(.$exon_meth), ]
+# exon percent = 7.38%
 
-introns <- df %>%
+introns <- bed %>%
   filter(startsWith(V11, "Intron")) %>%
-  mutate(intron_meth = sum(V5), na.rm = TRUE) %>% # intron_meth = 3994722
-  mutate(intron_unmeth = sum(V6), na.rm = TRUE) %>% # intron_unmeth = 69751983
-  select(V11, intron_meth, intron_unmeth) %>%
-  slice(1)
-# intron percent = 5.73%
+  mutate(intron_meth = sum(V5), na.rm = TRUE) %>% # intron_meth = 3512946
+  mutate(intron_unmeth = sum(V6), na.rm = TRUE) %>% # intron_unmeth = 68063739
+  dplyr::select(V11, intron_meth, intron_unmeth) %>%
+  .[!duplicated(.$intron_meth), ]
+# intron percent = 4.91%
 #
 
 ## Genome context of samples ----
 
-library(dplyr) # v1.1.4
+library(dplyr) # v1.2.1
 library(tidyr) # v1.3.1
 library(tibble) # v3.2.1
-library(ggplot2) # v3.5.1
+library(ggplot2) # v4.0.3
 
-# read in percent methylation tsv file
-samp_context <- read.table("sample_genome_context.tsv", sep = '\t', header = TRUE)
-
-context_data <- samp_context %>%
-  pivot_longer(-c(sample, generation, inoculation, group), names_to = 'context', values_to = 'percents')
+# read in the sample context tsv using the weighted averages
+contexts <- read.table("context_level_counts.tsv", sep = '\t', header = TRUE) %>%
+  mutate(group = case_when(startsWith(sample, 'nb') ~ 'bmc_parent', startsWith(sample, 'nc') ~ 'placebo_parent', 
+                           startsWith(sample, 'sb') ~ 'bmc_sperm', startsWith(sample, 'sc') ~ 'placebo_sperm')) %>%
+  filter(context != "other") %>%
+  dplyr::select(sample, group, context, weighted_average)
 
 # Reorder levels
-context$group <- factor(context$group, levels = c("placebo_parent", "bmc_parent", "placebo_sperm", "bmc_sperm"))
-context$context <- factor(context$context, levels = c('Exonic', 'Intronic', 'Intergenic', 'TotalCpGs'))
+contexts$group <- factor(contexts$group, levels = c("placebo_parent", "bmc_parent", "placebo_sperm", "bmc_sperm"))
+contexts$context <- factor(contexts$context, levels = c('exon', 'intron', 'intergenic', 'total'))
 
 # plot the boxplot
-p<-ggplot(context, aes(x= context, y=percents))+
+p<-ggplot(contexts, aes(x= context, y=weighted_average))+
   geom_boxplot(aes(fill = group), colour= "black", linewidth=0.3, fatten = 0.3) +
   scale_fill_manual(values=c("#D81B60", "#1E88E5", "#FFC107", "#004D40"), labels = c("Placebo Parent", "BMC Parent", "Placebo Sperm", "BMC Sperm"), name = NULL) +
   geom_point(aes(group = group), size=0.6, position = position_dodge(width=0.75)) +
   facet_wrap(vars(context), scales= "free_x", nrow = 1, ncol = 4) +
   theme_classic() +
+  scale_y_continuous(breaks = seq(4, 11 , by = 1), limits = c(4,11)) +
   theme(axis.line = element_line(colour = "black"),
         axis.text.x=element_text(angle = 0, vjust = 0, hjust = 0.5),
         strip.text = element_blank(), strip.background = element_blank(),
@@ -488,82 +347,100 @@ p
 ggsave("sample_genomic_context_boxplots.pdf", plot = p, width = 8, height = 3)
 
 # stats
-exons <- context_data %>%
-  filter(context == 'Exonic')
-hist(exons$percents)
-shapiro.test(exons$percents) # W = 0.96177, p-value = 0.8087
-t<-aov(percents ~ generation + inoculation, data = exons)
+exons <- contexts %>%
+  filter(context == 'exon') %>%
+  mutate(generation = case_when(startsWith(sample, 'n') ~ 'parent', startsWith(sample, 's') ~ 'sperm')) %>%
+  mutate(inoculation = case_when(startsWith(sample, 'nb')|startsWith(sample, 'sb') ~ 'bmc', startsWith(sample, 'nc')|startsWith(sample, 'sc') ~ 'placebo'))
+hist(exons$weighted_average)
+shapiro.test(exons$weighted_average) # W = 0.92945, p-value = 0.3743
+t<-aov(weighted_average ~ generation * inoculation, data = exons)
 summary(t)
-#                       Df Sum Sq Mean Sq F value Pr(>F)  
-# generation              1  0.069   0.069   0.068 0.8008  
-# inoculation             1  4.175   4.175   4.123 0.0768 .
-# generation:inoculation  1  1.043   1.043   1.030 0.3398  
-# Residuals               8  8.101   1.013 
+#                         DfSum Sq  Mean Sq    F value      Pr(>F)  
+# generation              1  0.008    0.008      0.007      0.9358  
+# inoculation             1  4.700    4.700      4.180      0.0751 .
+# generation:inoculation  1  1.089    1.089      0.969      0.3538  
+# Residuals               8  8.994    1.124      
 
-introns <- context_data %>%
-  filter(context == 'Intronic')
-hist(introns$percents)
-shapiro.test(introns$percents) # W = 0.9026, p-value = 0.1714
-t<-aov(percents ~ generation * inoculation, data = introns)
+introns <- contexts %>%
+  filter(context == 'intron') %>%
+  mutate(generation = case_when(startsWith(sample, 'n') ~ 'parent', startsWith(sample, 's') ~ 'sperm')) %>%
+  mutate(inoculation = case_when(startsWith(sample, 'nb')|startsWith(sample, 'sb') ~ 'bmc', startsWith(sample, 'nc')|startsWith(sample, 'sc') ~ 'placebo'))
+hist(introns$weighted_average)
+shapiro.test(introns$weighted_average) # W = 0.91985, p-value = 0.2847
+t<-aov(weighted_average ~ generation * inoculation, data = introns)
 summary(t)
-#                       Df Sum Sq Mean Sq F value Pr(>F)
-# generation              1 0.1162 0.11616   1.383  0.273
-# inoculation             1 0.0653 0.06530   0.777  0.404
-# generation:inoculation  1 0.0307 0.03066   0.365  0.563
-# Residuals               8 0.6721 0.08401
+#                         Df Sum Sq Mean Sq F value Pr(>F)
+# generation              1 0.0384 0.03843   0.471  0.512
+# inoculation             1 0.0629 0.06294   0.772  0.405
+# generation:inoculation  1 0.0283 0.02833   0.347  0.572
+# Residuals               8 0.6523 0.08154
 
-inter <- context_data %>%
-  filter(context == 'Intergenic')
-hist(inter$percents)
-shapiro.test(inter$percents) # W = 0.77079, p-value = 0.004444
-rcompanion::scheirerRayHare(percents ~ generation * inoculation, data = inter) 
-#                       Df  Sum Sq      H p.value
-# generation              1 108.000 8.3077 0.00395
-# inoculation             1   3.000 0.2308 0.63095
-# generation:inoculation  1   5.333 0.4103 0.52184
-# Residuals               8  26.667  
-wilcox.test(percents ~ generation, data = inter)
-#W = 0, p-value = 0.002165
+inter <- contexts %>%
+  filter(context == 'intergenic') %>%
+  mutate(generation = case_when(startsWith(sample, 'n') ~ 'parent', startsWith(sample, 's') ~ 'sperm')) %>%
+  mutate(inoculation = case_when(startsWith(sample, 'nb')|startsWith(sample, 'sb') ~ 'bmc', startsWith(sample, 'nc')|startsWith(sample, 'sc') ~ 'placebo'))
+hist(inter$weighted_average)
+shapiro.test(inter$weighted_average) # W = 0.77902, p-value = 0.005463 ***not normal
+rcompanion::scheirerRayHare(weighted_average ~ generation * inoculation, data = inter) 
+#                         Df      Sum Sq            H         p.value
+# generation               1     108.000       8.3077         0.00395 ** generation significant
+# inoculation              1       1.333       0.1026         0.74877
+# generation:inoculation   1       3.000       0.2308         0.63095
+# Residuals                8      30.667
+wilcox.test(weighted_average ~ generation, data = inter, conf.int = T) # W = 0, p-value = 0.002165
 
-totals <- context %>%
-  filter(context == 'TotalCpGs')
-hist(totals$percents)
-shapiro.test(totals$percents) # W = 0.83045, p-value = 0.02123
-rcompanion::scheirerRayHare(percents ~ generation * inoculation, data = totals) 
+totals <- contexts %>%
+  filter(context == 'total') %>%
+  mutate(generation = case_when(startsWith(sample, 'n') ~ 'parent', startsWith(sample, 's') ~ 'sperm')) %>%
+  mutate(inoculation = case_when(startsWith(sample, 'nb')|startsWith(sample, 'sb') ~ 'bmc', startsWith(sample, 'nc')|startsWith(sample, 'sc') ~ 'placebo'))
+hist(totals$weighted_average)
+shapiro.test(totals$weighted_average) # W = 0.84437, p-value = 0.0313 ***not normal
+rcompanion::scheirerRayHare(weighted_average ~ generation * inoculation, data = totals) 
 #                       Df  Sum Sq      H p.value
-# generation              1 108.000 8.3077 0.00395
+# generation              1 108.000 8.3077 0.00395 ** generation significant
 # inoculation             1   5.333 0.4103 0.52184
 # generation:inoculation  1   3.000 0.2308 0.63095
 # Residuals               8  26.667 
-wilcox.test(percents ~ generation, data = totals)
-#W = 0, p-value = 0.002165
+wilcox.test(weighted_average ~ generation, data = inter, conf.int = T) # W = 0, p-value = 0.002165
 #
 
 ## Correlation matrix ----
 
-library(dplyr) # v1.1.4
-library(tibble) # v3.2.1
-library(data.table) # v1.17.0
-library(pheatmap) # v1.0.12
-library(ggplot2) # v3.5.1
+library(dplyr) # v1.2.1
+library(tibble) # v3.3.1
+library(data.table) # v1.18.4
+library(pheatmap) # v1.0.13
+library(ggplot2) # v4.0.3
+library(reshape2) #v1.4.5
 
 # read in mean meths tsv fil to run glms
-filt_pcts <- fread("all_filt_pct_context.tsv.gz", sep = '\t', header = TRUE)
+filt.pcts <- fread("all_clair3_pct_context.tsv.gz", sep = '\t', header = TRUE)
 
 # Filter out the data for the correlation plot
-df <- filt_pcts %>%
+df <- filt.pcts %>%
   mutate(scaf_pos = paste(.$scaffold, .$pos, sep = "_")) %>%
-  select(scaf_pos, nb22:sc5) %>%
+  dplyr::select(scaf_pos, nb22:sc5) %>%
   column_to_rownames('scaf_pos')
 
-hist(filt_pcts$merged) # not normal, many zeros
+hist(filt.pcts$merged) # not normal, many zeros
 corrk <- pcaPP::cor.fk(df)
+#fast estimation of kendall's tau rank correlation coefficient
+#corrp <- cor(df, method = "kendall", use = "everything")
 
 # set the self-correlations as NA
 diag(corrk) <- NA
 
+write.table(corrk, "kendall_tau_table.tsv", sep = "\t", row.names = TRUE, quote = FALSE)
+
+# make tau table
+corrk_long <- melt(corrk, varnames = c("sample1", "sample2"), value.name = "tau")
+corrk_long <- corrk_long[!is.na(corrk_long$tau), ] # drops the NA diagonal
+corrk_long <- corrk_long[as.character(corrk_long$sample1) < as.character(corrk_long$sample2), ]
+
+write.table(corrk_long, "kendall_correlation_pairs.tsv", sep = "\t", row.names = FALSE, quote = FALSE)
+
 # read in kendall tau table
-taus <- fread("kendall_tau_table.tsv", sep = '\t', header = TRUE)
+taus <- fread("kendall_correlation_pairs.tsv", sep = '\t', header = TRUE)
 
 taus.f <- taus %>%
   filter(group != "sperm")
@@ -586,131 +463,68 @@ pheatmap(corrk,
          width = 6,
          height = 6
          )
+dev.off()
 #
 
 ## PCA analysis of methylation ----
 
-library(dplyr) # v1.1.4
-library(data.table) # v1.17.0
-library(FactoMineR) # v2.11
-library(factoextra) # v1.0.7
+library(dplyr) # v1.2.1
+library(data.table) # v1.18.4
+library(factoextra) # v2.2.0
+library(tibble) # v3.3.1
 
 # read in percent methylation tsv file
-filt_pcts <- fread("all_filt_pct_context.tsv.gz", sep = '\t', header = TRUE)
-gene_list <- read.delim("cpg_all_genes.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
-high_genes <- read.delim("cpg_high_genes.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
-low_genes  <- read.delim("cpg_low_genes.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+filt.pcts <- fread("all_clair3_pct_context.tsv.gz", sep = '\t', header = TRUE)
 
 # Apply filter functions to just the CpG O/E genes
-tots <- filt_pcts %>%
+tots <- filt.pcts %>%
   mutate(scaf_pos = paste(.$scaffold, .$pos, sep = "_")) %>%
   select(scaf_pos, nb22:sc5) %>%
   column_to_rownames('scaf_pos') %>%
   t() %>%
   as.data.frame() %>%
   rownames_to_column('sample') %>%
-  mutate(group = case_when(startsWith(sample, 'nb') ~ 'bmc_parent', startsWith(sample, 'nc') ~ 'placebo_parent', startsWith(sample, 'sb') ~ 'bmc_sperm', startsWith(sample, 'sc') ~ 'placebo_sperm')) %>%
-  select(sample, group, everything())
+  mutate(group = case_when(startsWith(sample, 'nb') | startsWith(sample, 'nc') ~ 'parent',
+                           startsWith(sample, 'sb') | startsWith(sample, 'sc') ~ 'sperm')) %>%
+  mutate(pairs = case_when(endsWith(sample, 'c3') ~ 'c3', endsWith(sample, 'c4') ~ 'c4', endsWith(sample, 'c5') ~ 'c5', 
+                           endsWith(sample, 'b22') ~ 'b22', endsWith(sample, 'b26') ~ 'b26', endsWith(sample, 'b27') ~ 'b27')) %>%
+  select(group, pairs, everything()) %>%
+  select(-sample)
+
+num <- as.matrix(tots[setdiff(names(tots), c("group", "pairs"))])
+num <- qlogis(pmin(pmax(num / 100, 1e-6), 1 - 1e-6))
+num <- num[, apply(num, 2, sd) > 0, drop = FALSE]
 
 # Run the PCA
-res.pca <- PCA(tots, quali.sup=c(1,2), scale = TRUE, graph = FALSE)
+res.pca <- prcomp(num, center = TRUE, scale. = TRUE)
 
-fviz_pca_ind(res.pca,  geom = "point", pointsize = 5,
-             habillage="group", label = 'none',
-             palette = c("#5D3A9B","#5D3A9B", "#E66100", "#E66100"),
-             mean.point = FALSE,
-             invisible=c("quali.sup"),
-             alpha.ind = 1,
-             addEllipses = FALSE) +
-  scale_shape_manual(values=c(19,17,19,17)) +
-  ggtitle("Total") +
+# Get the PCA coordinates
+ind_df <- data.frame(PC1 = res.pca$x[, 1], PC2 = res.pca$x[, 2], group = tots$group, pairs = tots$pairs)
+pc_var <- (res.pca$sdev^2) / sum(res.pca$sdev^2) * 100
+
+# Add the grouping variables
+ind_df$group <- tots$group
+ind_df$pairs <- tots$pairs
+
+# Plot with ggplot2
+pca_plot <- ggplot(ind_df, aes(x = PC1, y = PC2, color = pairs, shape = group)) +
+  geom_point(size = 5, alpha = 1) +
+  scale_colour_manual(name = "pairs",
+                      values = c(b22 = "#332288", b26 = "#117733", b27 = "#44AA99",
+                                 c3 = "#88CCEE",  c4 = "#DDCC77",  c5 = "#882255")) +
+  scale_shape_manual(name = "group", values = c(parent = 19, sperm = 1)) +
+  labs(x = paste0("PC1 (", round(pc_var[1], 1), "%)"),
+       y = paste0("PC2 (", round(pc_var[2], 1), "%)")) +
   theme_bw() +
-  theme(panel.grid.minor=element_blank())+
-  theme(axis.text=element_text(size=14, family = "sans", colour = "black"),
-        axis.title=element_text(size=14, family = "sans", colour = "black")) +
-  theme(legend.text = element_text(size=12, family = "sans", colour = "black"), 
-        legend.title = element_text(size=14, family = "sans", colour = "black"))
-  
+  theme(panel.grid.minor = element_blank(),
+        axis.text        = element_text(size=14, family="sans", colour="black"),
+        axis.title       = element_text(size=14, family="sans", colour="black"),
+        legend.title     = element_text(size=14, family="sans", colour="black"),
+        legend.text      = element_text(size=12, family="sans", colour="black")) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey10") +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey10")
+
 ggsave("PCA_scaf_positions_all.pdf", width=8, height=6)
-#
-
-
-## Normality testing ----
-
-library(dplyr) # v1.1.4
-
-# read in median methylation tsv file
-mean.meths <- read.table("all_mean_meths.tsv", sep = '\t', header = TRUE)
-gene_universe <- read.delim("gene_universe.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
-
-# reformat the mean methylation data to run the glms
-mean.meths.f <- mean.meths %>%
-  filter(!grepl("^tRNA", gene)) %>% # 23960 genes
-  select(-meth_pos, -merged) %>%
-  filter(gene %in% gene_universe) %>% # 12492 genes
-  column_to_rownames('gene') %>%
-  t() %>%
-  as.data.frame() %>%
-  rownames_to_column('sample') %>%
-  mutate(generation = case_when(startsWith(sample, 'n') ~ 'adult', startsWith(sample, 's') ~ 'sperm'),
-         inoculation = case_when(startsWith(sample, 'nb') | startsWith(sample, 'sb') ~ 'bmc',
-                                 startsWith(sample, 'nc') | startsWith(sample, 'sc') ~ 'placebo')) %>%
-  select(sample, generation, inoculation, everything()) %>%
-  pivot_longer(-c(sample, generation, inoculation), names_to = 'gene', values_to = 'mean_meth')
-  
-mean.meths.f$generation <- as.factor(mean.meths.f$generation)
-mean.meths.f$inoculation <- as.factor(mean.meths.f$inoculation)
-
-# perform the shapiro test for all the conditions and count how many are not normally distributed
-lev.gen <- mean.meths.f %>%
-  group_by(gene) %>%
-  levene_test(mean_meth ~ generation) %>%
-  ungroup()  %>% 
-  mutate(bh = p.adjust(p, method = 'BH')) %>%
-  filter(bh < 0.05) # 209 genes of 12492 total are not-normal
-
-lev.inoc <- mean.meths.f %>%
-  group_by(gene) %>%
-  levene_test(mean_meth ~ inoculation) %>%
-  ungroup()  %>% 
-  mutate(bh = p.adjust(p, method = 'BH')) %>%
-  filter(bh < 0.05) # 44 genes of 12492 total are not-normal
-
-shap.adult <- mean.meths.f %>%
-  filter(grepl('adult', generation)) %>%
-  group_by(gene)  %>%
-  filter(n_distinct(mean_meth) > 1) %>%
-  do(tidy(shapiro.test(.$mean_meth)))  %>% 
-  ungroup()  %>%
-  mutate(bh = p.adjust(p.value, method = 'BH')) %>%
-  filter(bh < 0.05) # 3221 genes of 12492 total are not-normal
-
-shap.sperm <- mean.meths.f %>%
-  filter(grepl('sperm', generation)) %>%
-  group_by(gene)  %>%
-  filter(n_distinct(mean_meth) > 1) %>%
-  do(tidy(shapiro.test(.$mean_meth)))  %>% 
-  ungroup()  %>%
-  mutate(bh = p.adjust(p.value, method = 'BH')) %>%
-  filter(bh < 0.05) # 4730 genes of 12492 total are not-normal
-
-shap.placebo <- mean.meths.f %>%
-  filter(grepl('placebo', inoculation)) %>%
-  group_by(gene)  %>%
-  filter(n_distinct(mean_meth) > 1) %>%
-  do(tidy(shapiro.test(.$mean_meth)))  %>% 
-  ungroup()  %>%
-  mutate(bh = p.adjust(p.value, method = 'BH')) %>%
-  filter(bh < 0.05) # 3744 genes of 12492 total are not-normal
-
-shap.bmc <- mean.meths.f %>%
-  filter(grepl('bmc', inoculation)) %>%
-  group_by(gene)  %>%
-  filter(n_distinct(mean_meth) > 1) %>%
-  do(tidy(shapiro.test(.$mean_meth))) %>%
-  ungroup()  %>%
-  mutate(bh = p.adjust(p.value, method = 'BH')) %>%
-  filter(bh < 0.05) # 3768 genes of 12492 total are not-normal
 #
 
 ## GLM ----
@@ -722,131 +536,147 @@ library(purrr) # v1.0.4
 library(broom) # v1.0.7
 
 # read in mean meths tsv fil to run glms
-mean.meths <- read.table("all_mean_meths.tsv", sep = '\t', header = TRUE)
-gene_universe <- read.delim("gene_universe.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+gene.counts <- read.table("gene_level_counts.tsv", sep = '\t', header = TRUE)
+gene.universe <- read.delim("gene_universe_conserved_3CpGs.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
 
 # reformat the mean methylation data to run the glms
-mean.meths.f <- mean.meths %>%
-  filter(!grepl("^tRNA", gene)) %>% # 23960 genes
-  filter(meth_pos >= 3) %>%
-  select(-meth_pos) %>%
-  filter(gene %in% gene_universe) %>% # 10883 genes
-  column_to_rownames('gene') %>%
-  t() %>%
-  as.data.frame() %>%
-  rownames_to_column('sample') %>%
+gene.counts.f <- gene.counts %>%
+  filter(gene %in% gene.universe) %>%
   mutate(generation = case_when(startsWith(sample, 'n') ~ 'adult', startsWith(sample, 's') ~ 'sperm'),
          inoculation = case_when(startsWith(sample, 'nb') | startsWith(sample, 'sb') ~ 'bmc',
                                  startsWith(sample, 'nc') | startsWith(sample, 'sc') ~ 'placebo')) %>%
-  select(sample, generation, inoculation, everything()) %>%
-  pivot_longer(-c(sample, generation, inoculation), names_to = 'gene', values_to = 'mean_meth')
+  select(sample, generation, inoculation, everything())
 
-mean.meths.f$generation <- factor(mean.meths.f$generation, levels = c('adult', 'sperm'))
-mean.meths.f$inoculation <- factor(mean.meths.f$inoculation, levels = c('placebo', 'bmc'))
+gene.counts.f$generation <- factor(gene.counts.f$generation, levels = c('adult', 'sperm'))
+gene.counts.f$inoculation <- factor(gene.counts.f$inoculation, levels = c('placebo', 'bmc'))
 
 # run the glm on each gene
-hope <- mean.meths.f %>%
+glm.results <- gene.counts.f %>%
   nest(data = -gene) %>%
   mutate(
     model = map(data, ~ {
-      l <- glm(mean_meth ~ generation + inoculation + generation:inoculation, data = ., family = gaussian())
-      s <- tryCatch(step(l, trace = 0), error = function(e) e)
-      if (inherits(s, "error") || !isTRUE(s$converged)) {
-        tibble(term = NA, estimate = NA, std.error = NA, statistic = NA, p.value = NA)
-      } else {
-        tidy(s)
+      d <- .
+      d$unmeth_count <- d$total_count - d$methylated_count
+      
+      # Primary model: additive only (interaction term resulted in 0 significant genes)
+      fit <- tryCatch(
+        glm(cbind(methylated_count, unmeth_count) ~ generation + inoculation,
+            data = d, family = binomial()),
+        error = function(e) e
+      )
+      
+      if (inherits(fit, "error")) {
+        return(tibble(term = NA, estimate = NA, std.error = NA,
+                      statistic = NA, p.value = NA, dispersion = NA))
       }
+      
+      disp <- sum(residuals(fit, type = "pearson")^2) / fit$df.residual
+      
+      if (!is.na(disp) && disp > 1.5) {
+        fit <- glm(cbind(methylated_count, unmeth_count) ~ generation + inoculation,
+                   data = d, family = quasibinomial())
+      }
+      
+      tidy(fit) %>% mutate(dispersion = disp)
     })
   ) %>%
   unnest_wider(model) %>%
   select(-data)
 
-# Filter the results to keep only the relevant comparisons
-res <- hope %>%
-  unnest(c(term, estimate, std.error, statistic, p.value)) %>%
-  filter(!if_all(2:ncol(.), is.na))
+# Reshape results
+res <- glm.results %>%
+  unnest(c(term, estimate, std.error, statistic, p.value, dispersion)) %>%
+  filter(!if_all(c(estimate, std.error, statistic, p.value), is.na))
 
-# Pivot the table for better readability
-res_wide <- pivot_wider(res, names_from = term, values_from = c(estimate, std.error, statistic, p.value))
-res_wide <- arrange(res_wide, gene)
+res.wide <- pivot_wider(res, names_from = term,
+                        values_from = c(estimate, std.error, statistic, p.value))
+res.wide <- arrange(res.wide, gene)
+
+# How many genes were fit with quasibinomial (overdispersed) vs binomial
+n_overdispersed <- res %>% distinct(gene, dispersion) %>% filter(dispersion > 1.5) %>% nrow() #4051 of 10763
 
 # Adjust for multiple testing (e.g., Benjamini-Hochberg) for each term
-res_gen <- res_wide %>%
+glm.gen <- res.wide %>%
   filter(!is.na(`p.value_generationsperm`)) %>%
   mutate(bh = p.adjust(`p.value_generationsperm`, method = 'BH')) %>%
   filter(bh < 0.05)
 
-write.table(res_gen$gene, "glm_gen_converged_bh.txt", sep="\t", row.names=FALSE, col.names = FALSE, quote = FALSE)
-write.table(res_gen, "glm_gen.tsv", sep="\t", row.names=FALSE)
+write.table(glm.gen$gene, "glm_gen_converged_bh.txt", sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
+write.table(glm.gen, "glm_gen.tsv", sep = "\t", row.names = FALSE)
 
 #--
 
-res_bmc <- res_wide %>%
+glm.bmc <- res.wide %>%
   filter(!is.na(`p.value_inoculationbmc`)) %>%
   mutate(bh = p.adjust(`p.value_inoculationbmc`, method = 'BH')) %>%
   filter(bh < 0.05)
 
-write.table(res_bmc$gene, "glm_bmc_converged_bh.txt", sep="\t", row.names=FALSE, col.names = FALSE, quote = FALSE)
-write.table(res_bmc, "glm_bmc.tsv", sep="\t", row.names=FALSE)
-
-#--
-
-res_interact <- res_wide %>%
-  filter(!is.na(`p.value_generationsperm:inoculationbmc`)) %>%
-  mutate(bh = p.adjust(`p.value_generationsperm:inoculationbmc`, method = 'BH')) %>%
-  filter(bh < 0.05)
-
-write.table(res_interact, "glm_gen_bmc_converged_bh.txt", sep="\t", row.names=FALSE, col.names = FALSE, quote = FALSE)
-write.table(res_interact, "glm_interact.tsv", sep="\t", row.names=FALSE)
+write.table(glm.bmc$gene, "glm_bmc_converged_bh.txt", sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
+write.table(glm.bmc, "glm_bmc.tsv", sep = "\t", row.names = FALSE)
 #
 
-## CpG of GLMs ----
+## CpG of GLMs ridgeplot ----
 
-library(dplyr) # v1.1.4
-library(purrr) # v1.0.4
-library(ggplot2) # v3.5.1
+library(dplyr) # v1.2.1
+library(purrr) # v1.2.2
+library(ggplot2) # v4.0.3
 
 # read in mean meths tsv fil to run glms
-acro_cpg <- read.delim("acropora_ref_cpg_bias.tsv", header=TRUE)
-glm_gen <- read.delim("glm_gen_converged_bh.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
-glm_bmc <- read.delim("glm_bmc_converged_bh.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+agland<-read.delim("acropora_cpg_bias.tsv", header=TRUE)
+gene.universe <- read.delim("gene_universe_conserved_3CpGs.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+glm.gen <- read.delim("glm_gen_converged_bh.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+sperm.hyper <- read.delim("sperm_hypermethylated_genes.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+sperm.hypo <- read.delim("sperm_hypomethylated_genes.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+glm.bmc <- read.delim("glm_bmc_converged_bh.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
 
-# filter the cpg data to only include the relevant genes
-df1 <- acro_cpg %>%
-  filter(!grepl("^tRNA", gene)) %>%
-  filter(CpG.bias >= 0.001 & CpG.bias <= 1.5) %>%
+# filter the cpg data
+cpg.genes <- agland %>%
+  filter(gene %in% gene.universe) %>% # 10763 genes
+  filter(CpG.bias >= 0.001 & CpG.bias <= 1.5) %>% # same filter as before (6 genes removed)
   select(gene, CpG.bias)
-df1$CpG.bias <- as.numeric(df1$CpG.bias)
+cpg.genes$CpG.bias <- as.numeric(cpg.genes$CpG.bias) # median = 0.8161
 
-df2 <- acro_cpg %>%
-  filter(!grepl("^tRNA", gene)) %>%
-  filter(CpG.bias >= 0.001 & CpG.bias <= 1.5) %>%
-  filter(gene %in% glm_gen) %>%
+gen.genes <- agland %>%
+  filter(gene %in% glm.gen) %>% # 868 genes
+  filter(CpG.bias >= 0.001 & CpG.bias <= 1.5) %>% # same filter as before (0 genes removed)
   select(gene, CpG.bias)
-df2$CpG.bias <- as.numeric(df2$CpG.bias)
+gen.genes$CpG.bias <- as.numeric(gen.genes$CpG.bias) # median = 0.62125
 
-df3 <- acro_cpg %>%
-  filter(!grepl("^tRNA", gene)) %>%
-  filter(CpG.bias >= 0.001 & CpG.bias <= 1.5) %>%
-  filter(gene %in% glm_bmc) %>%
+hyper.cpg <- agland %>%
+  filter(gene %in% sperm.hyper) %>% # 4 genes
+  filter(CpG.bias >= 0.001 & CpG.bias <= 1.5) %>% # same filter as before (0 genes removed)
   select(gene, CpG.bias)
-df3$CpG.bias <- as.numeric(df3$CpG.bias)
+hyper.cpg$CpG.bias <- as.numeric(hyper.cpg$CpG.bias) # median = 0.5263
+
+hypo.cpg <- agland %>%
+  filter(gene %in% sperm.hypo) %>% # 4 genes
+  filter(CpG.bias >= 0.001 & CpG.bias <= 1.5) %>% # same filter as before (0 genes removed)
+  select(gene, CpG.bias)
+hypo.cpg$CpG.bias <- as.numeric(hypo.cpg$CpG.bias) # median = 0.8797
+
+bmc.genes <- agland %>%
+  filter(gene %in% glm.bmc) %>% # 4 genes
+  filter(CpG.bias >= 0.001 & CpG.bias <= 1.5) %>% # same filter as before (0 genes removed)
+  select(gene, CpG.bias)
+bmc.genes$CpG.bias <- as.numeric(bmc.genes$CpG.bias) # median = 0.70965
 
 # make list of dataframes to overlay
-my_list <- list(CpGbias = df1, glm_gen = df2, glm_bmc = df3)
+cpg.cats <- list(totals = cpg.genes, glm_gen = gen.genes, glm_bmc = bmc.genes)
 
 # stack them all into a tibble
-long_df <- imap_dfr(my_list, ~ tibble(CpG.bias = .x$CpG.bias, source = .y))
-long_df$source <- factor(long_df$source, levels = c('glm_bmc', 'glm_gen', 'CpGbias'))
+long.cpg.cats <- imap_dfr(cpg.cats, ~ tibble(CpG.bias = .x$CpG.bias, source = .y))
+long.cpg.cats$source <- factor(long.cpg.cats$source, levels = c('glm_bmc', 'glm_gen', 'totals'))
 
-hist(long_df$CpG.bias) # not normal, many zeros
-t<-aov(long_df$CpG.bias ~ long_df$source)
-summary(t)
-TukeyHSD(t)
+# test variances across the groups
+car::leveneTest(CpG.bias ~ source, data = long.cpg.cats) # unequal variances, use nonparametric
+#           Df F value    Pr(>F)    
+# group     2   16.42 7.563e-08 ***
+kruskal.test(CpG.bias ~ source, data = long.cpg.cats) # chi-squared = 326.91, df = 2, p-value < 2.2e-16
+FSA::dunnTest(CpG.bias ~ source, data = long.cpg.cats, method = "bh")
 
 # plot
-ridge <- ggplot(long_df, aes(x = CpG.bias, y = source, fill = source)) +
-  ggridges::geom_density_ridges(scale = 1.5, rel_min_height = 0.001, alpha = 0.5) +
+ggplot(long.cpg.cats, aes(x = CpG.bias, y = source, fill = source)) +
+  ggridges::geom_density_ridges(scale = 0.8, rel_min_height = 0.001, alpha = 0.5) +
   scale_fill_manual(values=c("#7648E3", "#2A6D61", "#9C9C9C")) +
   scale_x_continuous(breaks = seq(0, 1.5, by = 0.5), limits = c(0, 1.5)) +
   geom_vline(xintercept = 0.588, color = "grey30", linetype = "dashed", linewidth = 1) +
@@ -858,68 +688,53 @@ ridge <- ggplot(long_df, aes(x = CpG.bias, y = source, fill = source)) +
         axis.title = element_text(size=14, family = "sans", colour = "black"),
         axis.ticks.y = element_blank(), axis.line.y = element_blank(), 
         legend.position = 'none') +
-  scale_y_discrete(labels = c("GLM inoculation", "GLM generation", "Total genes"),
-                   expand = expansion(add = c(0.2)),
+  scale_y_discrete(labels = c("GLM - inoculation", "GLM - life stage", "Total genes"),
+                   expand = expansion(add = c(0.1)),
                    position = 'right') +
   labs(x = expression("CpG"[O/E]), y = NULL)
 
-ggsave("cpg_genes_ridgeplot.pdf", plot = ridge, width=8, height=6)
+ggsave("cpg_genes_ridgeplot.pdf", width=8, height=6, dpi = 300)
 #
 
 ## Differential abundances of genes ----
 
-library(dplyr) # v1.1.4
-library(tibble) # v3.2.1
-library(tidyr) # v1.3.1
-library(broom) # v1.0.7
-library(pheatmap) # v1.0.12
-library(ggplot2) # v3.5.1
+library(dplyr) # v1.2.1
+library(tibble) # v3.3.1
+library(tidyr) # v1.3.2
+library(broom) # v1.0.13
+library(pheatmap) # v1.0.13
+library(ggplot2) # v4.0.3
 
 # read in mean meths tsv fil to run glms
-mean.meths <- read.table("all_mean_meths.tsv", sep = '\t', header = TRUE)
-gene_universe <- read.delim("gene_universe.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
-glm_gen <- read.delim("glm_gen_converged_bh.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
-glm_bmc <- read.delim("glm_bmc_converged_bh.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+weighted.avgs <- read.table("gene_level_counts.tsv", sep = '\t', header = TRUE)
+gene.universe <- read.delim("gene_universe_conserved_3CpGs.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+glm.gen <- read.delim("glm_gen_converged_bh.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+glm.bmc <- read.delim("glm_bmc_converged_bh.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
 
 # reformat the mean methylation data to run the glms
-mean.meths.f <- mean.meths %>%
-  filter(!grepl("^tRNA", gene)) %>% # 23960 genes
-  filter(meth_pos >= 3) %>%
-  select(-meth_pos, -merged, -sperm, -parent) %>%
-  filter(gene %in% gene_universe) %>% # 10883 genes
-  column_to_rownames('gene') %>%
-  t() %>%
-  as.data.frame() %>%
-  rownames_to_column('sample') %>%
+weighted.avgs.f <- weighted.avgs %>%
+  filter(gene %in% gene.universe) %>% # 10763
   mutate(generation = case_when(startsWith(sample, 'n') ~ 'adult', startsWith(sample, 's') ~ 'sperm'),
          inoculation = case_when(startsWith(sample, 'nb') | startsWith(sample, 'sb') ~ 'bmc',
                                  startsWith(sample, 'nc') | startsWith(sample, 'sc') ~ 'placebo')) %>%
-  select(sample, generation, inoculation, everything()) %>%
-  pivot_longer(-c(sample, generation, inoculation), names_to = 'gene', values_to = 'mean_meth')
+  select(sample, generation, inoculation, gene, weighted_average)
 
-mean.meths.f$generation <- factor(mean.meths.f$generation, levels = c('adult', 'sperm'))
-mean.meths.f$inoculation <- factor(mean.meths.f$inoculation, levels = c('placebo', 'bmc'))
+weighted.avgs.f$generation <- factor(weighted.avgs.f$generation, levels = c('adult', 'sperm'))
+weighted.avgs.f$inoculation <- factor(weighted.avgs.f$inoculation, levels = c('placebo', 'bmc'))
 
 # run the heatmap for the glm_gen and glm_bmc
-gen_meths <- mean.meths.f %>% 
-  filter(gene %in% glm_gen) %>%
-  group_by(gene, generation) %>%
-  summarise(avg = mean(mean_meth)) %>%
-  mutate(diff = max(avg) - min(avg)) %>%
-  filter(diff >= 10) %>%
-  distinct(gene) %>%
-  inner_join(., mean.meths.f, by ='gene') %>%
-  select(sample, generation, inoculation, gene, mean_meth) %>%
-  pivot_wider(id_cols = c('sample', 'generation', 'inoculation'), names_from = 'gene', values_from = 'mean_meth') %>%
+gen.meths <- weighted.avgs.f %>% 
+  filter(gene %in% glm.gen) %>%
+  pivot_wider(id_cols = c('sample', 'generation', 'inoculation'), names_from = 'gene', values_from = 'weighted_average') %>%
   column_to_rownames('sample')
 
 # plot the heatmap
-heatr <- t(gen_meths[,3:ncol(gen_meths)]) # just the data, adjust the group as needed
-heatr <- t(scale(t(heatr))) # scale before pheatmap
-heatr.gs <- select(gen_meths, generation, inoculation) # groups
+heat.gen <- t(gen.meths[,3:ncol(gen.meths)]) # just the data, adjust the group as needed
+heat.gen <- t(scale(t(heat.gen))) # scale before pheatmap because pheatmap scaling doesn't separate color enough
+heat.gen.gs <- select(gen.meths, generation, inoculation) # groups
 
-heatr.gs$generation <- factor(heatr.gs$generation, levels = c('adult', 'sperm'))
-heatr.gs$inoculation <- factor(heatr.gs$inoculation, levels = c('placebo', 'bmc'))
+heat.gen.gs$generation <- factor(heat.gen.gs$generation, levels = c('adult', 'sperm'))
+heat.gen.gs$inoculation <- factor(heat.gen.gs$inoculation, levels = c('placebo', 'bmc'))
 
 pheatmap(heatr,
          color = rev(colorRampPalette(RColorBrewer::brewer.pal(10, 'RdYlBu'))(256)),
@@ -929,7 +744,7 @@ pheatmap(heatr,
          angle_col = 45,
          border_color= NA,
          annotation_col = heatr.gs,
-         filename = "/Users/barnoar/Documents/acropora_spawning_23/figures/heatmap_gen_glm_10.pdf",
+         filename = "heatmap_gen_glm.pdf",
          width = 6,
          height = 6
          )
@@ -937,25 +752,18 @@ pheatmap(heatr,
 #--
 
 # run the heatmap for the glm_bmc
-bmc_meths <- mean.meths.f %>% 
-  filter(gene %in% glm_bmc) %>%
-  group_by(gene, inoculation) %>%
-  summarise(avg = mean(mean_meth)) %>%
-  mutate(diff = max(avg) - min(avg)) %>%
-  filter(diff >= 10) %>%
-  distinct(gene) %>%
-  inner_join(., mean.meths.f, by ='gene') %>%
-  select(sample, generation, inoculation, gene, mean_meth) %>%
-  pivot_wider(id_cols = c('sample', 'generation', 'inoculation'), names_from = 'gene', values_from = 'mean_meth') %>%
+bmc.meths <- weighted.avgs.f %>% 
+  filter(gene %in% glm.bmc) %>%
+  pivot_wider(id_cols = c('sample', 'generation', 'inoculation'), names_from = 'gene', values_from = 'weighted_average') %>%
   column_to_rownames('sample')
 
 # plot the heatmap
-heatr <- t(bmc_meths[,3:ncol(bmc_meths)]) # just the data, adjust the group as needed
-heatr <- t(scale(t(heatr))) # scale before pheatmap
-heatr.gs <- select(bmc_meths, generation, inoculation) # groups
+heat.bmc <- t(bmc.meths[,3:ncol(bmc.meths)]) # just the data, adjust the group as needed
+heat.bmc <- t(scale(t(heat.bmc))) # scale before pheatmap because pheatmap scaling doesn't separate color enough
+heat.bmc.gs <- select(bmc.meths, generation, inoculation) # groups
 
-heatr.gs$generation <- factor(heatr.gs$generation, levels = c('adult', 'sperm'))
-heatr.gs$inoculation <- factor(heatr.gs$inoculation, levels = c('placebo', 'bmc'))
+heat.bmc.gs$generation <- factor(heat.bmc.gs$generation, levels = c('adult', 'sperm'))
+heat.bmc.gs$inoculation <- factor(heat.bmc.gs$inoculation, levels = c('placebo', 'bmc'))
 
 pheatmap(heatr,
          color = rev(colorRampPalette(RColorBrewer::brewer.pal(10, 'RdYlBu'))(256)),
@@ -965,50 +773,395 @@ pheatmap(heatr,
          angle_col = 45,
          border_color= NA,
          annotation_col = heatr.gs,
-         filename = "/Users/barnoar/Documents/acropora_spawning_23/figures/heatmap_bmc_glm_10.pdf",
+         filename = "heatmap_bmc_glm.pdf",
          width = 6,
          height = 3
          )
 #
 
+## topGO of gen GLMs ----
+
+library(topGO) # v2.62.0
+
+# remember to change the folder name to point to the folder containing your genes of interest lists
+folder_of_interest = "heatmap_genes/"
+
+# exclude files with "universe" in it
+mult_files = grep(list.files(folder_of_interest), pattern="*genes.txt", value = T)
+universe_file = grep(list.files(folder_of_interest), pattern="*universe.txt", value =T)
+
+for (m in mult_files) {
+  annot_filename = 'acropora_ref_goIDs.tsv'
+  gene_id_to_go = readMappings(file=annot_filename)
+  
+  # shrink list of all GO terms down to the correct universe
+  #universe_file = gsub('up', 'universe', m)
+  #universe_file = gsub('down', 'universe', universe_file)
+  #universe_file = gsub('diff', 'universe', universe_file)
+  universe_genes = scan(paste0(folder_of_interest, universe_file), character(0), sep="\n")
+  
+  gene_id_to_go = gene_id_to_go[universe_genes]
+  gene_id_to_go = gene_id_to_go[gene_id_to_go != 'no_hit']
+  gene_names = names(gene_id_to_go)
+  
+  for (go_category in c('bp', 'cc', 'mf')) {
+    print(paste("Current file:", m))
+    genes_of_interest_filename = paste0(folder_of_interest, m)
+    genes_of_interest = scan(genes_of_interest_filename, character(0), sep="\n")
+    genes_of_interest <- genes_of_interest[genes_of_interest %in% names(gene_id_to_go)]
+    
+    genelist = factor(as.integer(gene_names %in% genes_of_interest))
+    names(genelist) = gene_names
+    
+    GOdata = try(new("topGOdata", ontology=toupper(go_category), allGenes=genelist, gene2GO=gene_id_to_go, annotationFun=annFUN.gene2GO))
+    
+    # handle error
+    if (class(GOdata) == "try-error") {
+      print (paste0("Error for file", m, "!"))
+      next
+    }
+    
+    # weight01 is the default algorithm used in Alexa et al. (2006)
+    weight01.fisher <- runTest(GOdata, statistic = "fisher")
+    
+    # generate a results table (for only the top 1000 GO terms)
+    #   topNodes: highest 1000 GO terms shown
+    #   numChar: truncates GO term descriptions at 1000 chars (basically, disables truncation)
+    if (length(genes_of_interest) < 500) {
+      results_table = GenTable(GOdata, P_value=weight01.fisher, orderBy="P_value", topNodes=100, numChar=1000)
+    } else {
+      results_table = GenTable(GOdata, P_value=weight01.fisher, orderBy="P_value", topNodes=250, numChar=1000)
+    }
+    
+    # write it out into a file for python post-processing
+    output_filename = paste0("heatmap_genes/", go_category, "_", m)
+    write.table(results_table, file=output_filename, quote=FALSE, sep='\t')
+  }
+}
+#
+
+## DSS differential methylation analysis ----
+
+library(DSS) # v2.58.0
+library(dplyr) # v1.2.1
+require(bsseq) # v1.46.0
+
+# read in the design file
+design <- read.table("design.txt", sep = '\t', header = TRUE)
+design
+design$generation <- factor(design$generation, levels = c("adult", "sperm"))
+levels(design$generation)
+design$inoculation <- factor(design$inoculation, levels = c("placebo", "bmc"))
+levels(design$inoculation)
+
+# read in all the methylation data from the files
+dss.dir <- "dss_input"
+
+meth.list <- lapply(design$sample, function(s) {
+  read.table(file.path(dss.dir, paste0(s, "_dss_input.txt")),
+             sep = "\t", header = TRUE)
+})
+names(meth.list) <- design$sample
+
+# make the bs object with the files
+BSobj <- makeBSseqData(meth.list, sampleNames = design$sample)
+
+# observe the model matrix
+X = model.matrix(~generation+inoculation, design)
+
+# fit the model (similar to multiple regression); model only needs to be fit once
+DMLfit = DMLfit.multiFactor(BSobj, design=design, 
+                            formula=~generation+inoculation)
+
+# check to see which column refers to which comparison
+colnames(DMLfit$X)
+
+# look to see the positions affected by each factor 
+DMLtest.gen <- DMLtest.multiFactor(DMLfit, coef = 2)
+DMLtest.inoc <- DMLtest.multiFactor(DMLfit, coef = 3)
+
+# identify DMCs
+dmc.gen <- DMLtest.gen %>%
+  as.data.frame() %>%
+  filter(fdrs < 0.05) %>%
+  arrange(fdrs)
+# 61667 DMCs
+dmc.inoc <- DMLtest.inoc %>%
+  as.data.frame() %>%
+  filter(fdrs < 0.05) %>%
+  arrange(fdrs)
+# 4276 DMCs
+
+write.table(dmc.gen, "dss_dmc_generation.tsv", sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(dmc.inoc, "dss_dmc_inoculation.tsv", sep = "\t", row.names = FALSE, quote = FALSE)
+
+# now we can call different methylated regions
+gen.dmrs = callDMR(DMLtest.gen, p.threshold=0.001) # 3362 DMRs
+bmc.dmrs = callDMR(DMLtest.inoc, p.threshold=0.001) # 400 DMRs
+
+# visualize DMR
+showOneDMR(bmc.dmrs[1,], BSobj)
+
+# save to files
+write.table(gen.dmrs, "dss_dmrs_generation.txt", sep="\t", row.names=FALSE, quote = FALSE)
+write.table(bmc.dmrs, "dss_dmrs_inoculation.txt", sep="\t", row.names=FALSE, quote = FALSE)
+
+# create a Granges object from results to get the sequences associated with the DMRs
+library(GenomicRanges) # v1.62.1
+
+dmr.gr <- GRanges(seqnames = bmc.dmrs$chr,
+                  ranges = IRanges(start = bmc.dmrs$start, end = bmc.dmrs$end), strand = "*")
+
+mcols(dmr.gr)$length <- bmc.dmrs$length
+mcols(dmr.gr)$nCG <- bmc.dmrs$nCG
+mcols(dmr.gr)$areaStat <- bmc.dmrs$areaStat
+dmr.gr
+
+library(Rsamtools) # v2.26.0
+library(Biostrings) # v2.78.0
+
+genome <- FaFile("acropora_ref.fa")
+open(genome)
+
+dmr.seqs <- getSeq(genome, dmr.gr)
+dmr.seqs
+
+writeXStringSet(dmr.seqs, "inoculation_dmr_sequences.fa")
+#
+
+## Find overlapping DMRs between two tests  ----
+
+library(GenomicRanges) # v1.62.1
+library(dplyr) # v1.2.1
+library(rtracklayer) #1.70.1
+
+# dmr table
+bmc.dmrs <- read.table("dss_dmrs_inoculation.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+gen.dmrs <- read.table("dss_dmrs_generation.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+dmr.gen <- GRanges(seqnames = gen.dmrs$chr,
+                  ranges = IRanges(start = gen.dmrs$start, end = gen.dmrs$end), strand = "*")
+
+mcols(dmr.gen)$length <- gen.dmrs$length
+mcols(dmr.gen)$nCG <- gen.dmrs$nCG
+mcols(dmr.gen)$areaStat <- gen.dmrs$areaStat
+
+dmr.bmc <- GRanges(seqnames = bmc.dmrs$chr,
+                      ranges = IRanges(start = bmc.dmrs$start, end = bmc.dmrs$end),
+                      strand = "*")
+mcols(dmr.bmc)$length   <- bmc.dmrs$length
+mcols(dmr.bmc)$nCG      <- bmc.dmrs$nCG
+mcols(dmr.bmc)$areaStat <- bmc.dmrs$areaStat
+
+overlaps.bmc.gen <- findOverlaps(dmr.bmc, dmr.gen)
+
+n.bmc.overlap <- n_distinct(queryHits(overlaps.bmc.gen)) # 58 overlaps
+n.gen.overlap  <- n_distinct(subjectHits(overlaps.bmc.gen)) # 57 overlaps
+
+dmr.overlap <- data.frame(
+  inoc_chr       = as.character(seqnames(dmr.bmc))[queryHits(overlaps.bmc.gen)],
+  inoc_start     = start(dmr.bmc)[queryHits(overlaps.bmc.gen)],
+  inoc_end       = end(dmr.bmc)[queryHits(overlaps.bmc.gen)],
+  bmc_areaStat  = mcols(dmr.bmc)$areaStat[queryHits(overlaps.bmc.gen)],
+  gen_chr        = as.character(seqnames(dmr.gen))[subjectHits(overlaps.bmc.gen)],
+  gen_start      = start(dmr.gen)[subjectHits(overlaps.bmc.gen)],
+  gen_end        = end(dmr.gen)[subjectHits(overlaps.bmc.gen)],
+  gen_areaStat   = mcols(dmr.gen)$areaStat[subjectHits(overlaps.bmc.gen)]
+)
+
+write.table(dmr.overlap, "dmr_inoculation_generation_overlap.tsv", sep = "\t", row.names = FALSE, quote = FALSE)
+#
+
+## Determine whether DMRs fall within gene bodies/promoters ----
+
+library(GenomicRanges) # v1.62.1
+library(dplyr) # v1.2.1
+library(rtracklayer) #1.70.1
+
+# dmr table
+bmc.dmrs <- read.table("dss_dmrs_inoculation.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+glm.bmc <- read.delim("glm_bmc_converged_bh.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
+
+# gff file
+gff <- import("acropora_ref.gff")
+
+dmr.gr <- GRanges(seqnames = bmc.dmrs$chr,
+                  ranges = IRanges(start = bmc.dmrs$start, end = bmc.dmrs$end), strand = "*")
+
+mcols(dmr.gr)$length <- bmc.dmrs$length
+mcols(dmr.gr)$nCG <- bmc.dmrs$nCG
+mcols(dmr.gr)$areaStat <- bmc.dmrs$areaStat
+dmr.gr
+
+genes.gr <- gff[gff$type == "gene"]
+mcols(genes.gr)$gene_id <- unlist(mcols(genes.gr)$ID)
+overlaps <- findOverlaps(dmr.gr, genes.gr)
+
+dmr.gene.overlap <- data.frame(
+  dmr_chr    = as.character(seqnames(dmr.gr))[queryHits(overlaps)],
+  dmr_start  = start(dmr.gr)[queryHits(overlaps)],
+  dmr_end    = end(dmr.gr)[queryHits(overlaps)],
+  dmr_areaStat = mcols(dmr.gr)$areaStat[queryHits(overlaps)],
+  dmr_nCG    = mcols(dmr.gr)$nCG[queryHits(overlaps)],
+  gene_id    = mcols(genes.gr)$gene_id[subjectHits(overlaps)]
+)
+
+dmr.gene.overlap %>%
+  distinct(dmr_chr, dmr_start, dmr_end, .keep_all = TRUE) %>%
+  dplyr::count() # Of 400 inoculation DMRs, 66 overlap at least one gene body
+dmr.gene.overlap %>%
+  distinct(gene_id, .keep_all = TRUE) %>%
+  dplyr::count() # 48 unique genes
+
+# write DMRs overlapping in gene bodies to tsv file
+write.table(dmr.gene.overlap, "dmr_inoculation_gene_overlap.tsv", sep = "\t", row.names = FALSE, quote = FALSE)
+
+# Confirm strandedness in genes.gr
+table(strand(genes.gr))
+
+## Determine whether the genes that are in gene bodies are in exons/introns
+
+mrna.gr <- gff[gff$type == "mRNA"]
+mrna_ids <- sapply(mcols(mrna.gr)$ID, function(x) x[1])
+mrna_parents <- sapply(mcols(mrna.gr)$Parent, function(x) x[1])
+mrna_to_gene <- setNames(mrna_parents, mrna_ids)
+
+# restricting to genes with DMRs
+genes_of_interest <- unique(dmr.gene.overlap$gene_id)   # 48 genes
+
+# exons
+exons.gr <- gff[gff$type == "exon"]
+exon_parent_mrna <- unlist(mcols(exons.gr)$Parent)
+exons.gr$gene_id <- mrna_to_gene[exon_parent_mrna]
+exons.gr <- exons.gr[exons.gr$gene_id %in% genes_of_interest]
+
+exons_by_gene <- reduce(split(exons.gr, exons.gr$gene_id))
+
+# using the genes with DMRs
+valid_genes <- intersect(genes_of_interest, names(exons_by_gene))
+exons_by_gene <- exons_by_gene[valid_genes]
+genes_matched <- genes.gr[match(valid_genes, mcols(genes.gr)$gene_id)]
+
+# introns by non-exons
+introns_by_gene <- psetdiff(genes_matched, exons_by_gene)
+introns.gr <- unlist(introns_by_gene)
+mcols(introns.gr)$gene_id <- names(introns.gr)
+
+# classifying above DMRs are exon or intron
+dmr.gene.overlap.classified <- dmr.gene.overlap %>%
+  rowwise() %>%
+  mutate(
+    in_exon = {
+      dmr_r <- GRanges(dmr_chr, IRanges(dmr_start, dmr_end))
+      if (!gene_id %in% names(exons_by_gene)) {
+        NA
+      } else {
+        any(overlapsAny(dmr_r, exons_by_gene[[gene_id]]))
+      }
+    },
+    in_intron = {
+      dmr_r <- GRanges(dmr_chr, IRanges(dmr_start, dmr_end))
+      if (!gene_id %in% names(introns_by_gene)) {
+        NA
+      } else {
+        any(overlapsAny(dmr_r, introns_by_gene[[gene_id]]))
+      }
+    }
+  ) %>%
+  ungroup()
+
+table(dmr.gene.overlap.classified$in_exon, dmr.gene.overlap.classified$in_intron,
+      useNA = "ifany", dnn = c("in_exon", "in_intron"))
+# in exons 30/66 DMRs
+# in introns 22/66 DMRs
+# in both 16/66 DMRs
+
+write.table(dmr.gene.overlap.classified, "dmr_gene_overlap_exons_introns.tsv",
+            sep = "\t", row.names = FALSE, quote = FALSE)
+
+## Find promoters upstream of genes using the canonical window size
+up <- 500
+down <- 0
+
+promoter.gr <- promoters(genes.gr, upstream = up, downstream = down)
+mcols(promoter.gr)$gene_id <- mcols(genes.gr)$gene_id
+
+overlaps <- findOverlaps(dmr.gr, promoter.gr)
+
+dmr.promoter.overlap <- data.frame(
+  dmr_chr      = as.character(seqnames(dmr.gr))[queryHits(overlaps)],
+  dmr_start    = start(dmr.gr)[queryHits(overlaps)],
+  dmr_end      = end(dmr.gr)[queryHits(overlaps)],
+  dmr_areaStat = mcols(dmr.gr)$areaStat[queryHits(overlaps)],
+  gene_id      = mcols(promoter.gr)$gene_id[subjectHits(overlaps)]
+)
+
+n_dmrs_in_promoters <- n_distinct(dmr.promoter.overlap[, c("dmr_chr","dmr_start","dmr_end")]) # 22 DMRs in promoters
+n_genes_touched <- n_distinct(dmr.promoter.overlap$gene_id)
+n_glm_overlap <- sum(dmr.promoter.overlap$gene_id %in% glm.bmc)
+
+write.table(dmr.promoter.overlap, "dmr_promoter_overlap.tsv", sep = "\t", row.names = FALSE, quote = FALSE)
+#
 
 ## NanoMethViz to visualize methylation levels across a ROI ----
-
-# https://www.bioconductor.org/packages/release/bioc/vignettes/NanoMethViz/inst/doc/UsersGuide.html
-
-library(NanoMethViz) # v3.4.0
-library(dplyr) # v1.1.4
-library(data.table) # v1.17.0
+# adapted from https://www.bioconductor.org/packages/release/bioc/vignettes/NanoMethViz/inst/doc/UsersGuide.html
+                       
+library(NanoMethViz) # v3.9.0
+library(dplyr) # v1.2.1
+library(data.table) # v1.18.4
 library(tidyr) # v1.3.1
 library(Rsamtools) # v2.25.0
 library(patchwork) # v1.3.0
 
-# Import the gff data to fit the format of NanoMethViz
-anno <- rtracklayer::import("acropora_ref_assembly.gff.gz")
+# Import the gff data into a GRanges object that can be modified to fit the format of NanoMethViz
+anno <- rtracklayer::import("acropora_ref.gff")
+head(anno)
 
 genes <- anno %>%
   as.data.frame() %>%
   filter(type == "gene") %>%
   dplyr::rename(chr = "seqnames", gene_id = "ID") %>%
-  select("gene_id", "chr", "strand", "start", "end") %>%
+  dplyr::select("gene_id", "chr", "strand", "start", "end") %>%
   filter(!grepl("^tRNA", gene_id)) %>%
   mutate("transcript_id" = gene_id, "symbol" = gene_id)
 
+head(genes)
+
 # Define the samples annotations
 sample_anno <- read.table("sample_anno.tsv", sep = '\t', header = TRUE)
-
+                       
 # Build the NanoMethResult
 nmr <- NanoMethResult(
-  methy = "combined_data.sorted.tsv.gz",
+  methy = "combined_data_clair3.sorted.tsv.gz",
   samples = sample_anno,
   exons = genes
 )
 
-# Plot gene g2113, but put the window prop further left to include g2112
-gs <- plot_gene(nmr, "g2113", window_prop = c(1.655,0.12), smoothing_window = 500) #
-plots <- gs$patches$plots
-top_plot <- plots[[1]] + 
-  scale_y_continuous(limits = c(0.5, 0.75))
-gs_plot <- top_plot / plots[[2]]
-print(gs_plot)
+# loading saved results from previous bsseq analysis
+bsseq_dmr <- read.table("dss_dmrs_inoculation.txt", sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+
+## DMR regions
+a <- plot_region(nmr, "scaffold00015", 1782956, 1814493, smoothing_window = 500, anno_regions = bsseq_dmr)
+a[[1]] <- a[[1]] + scale_y_continuous(limits = c(0.499, 0.751))
+# g1713; IPR011989 Armadillo-like helical;IPR016024 Armadillo-type fold
+
+b <- plot_region(nmr, "scaffold00018", 1063899, 1069769, smoothing_window = 500, anno_regions = bsseq_dmr)
+b[[1]] <- b[[1]] + scale_y_continuous(limits = c(0.499, 0.751))
+# this includes g2112+g2113 
+# IPR017877 None;IPR026753 None;IPR028002 Myb/SANT-like DNA-binding domain 5
+# IPR026103 Harbinger transposase-derived nuclease, animal;IPR027806 Harbinger transposase-derived nuclease domain
+# I used the genes, then did 500 bases upstream for the "promoter region"
+
+c <- plot_region(nmr, "scaffold00074", 744480, 747533, smoothing_window = 500, anno_regions = bsseq_dmr)
+c[[1]] <- c[[1]] + scale_y_continuous(limits = c(0.499, 0.751))
+# includes g7678; hypothetical protein/ no InterPro data
+
+d <- plot_region(nmr, "scaffold00301", 259677, 271354, smoothing_window = 500, anno_regions = bsseq_dmr)
+d[[1]] <- d[[1]] + scale_y_continuous(limits = c(0.499, 0.751))
+# includes g19100; IPR008521 Magnesium transporter NIPA
+dmr_plot <- (a[[1]] / a[[3]] / b[[1]] / b[[3]] / c[[1]] / c[[3]] / d[[1]] / d[[3]]) + # keep top line plot + gene bar, drop the heatmap panel
+  plot_layout(heights = rep(c(4, 1), 4))
+print(dmr_plot)
+
+ggsave("dmr_plot_nanomethviz.pdf", plot = dmr_plot, width = 8, height = 11)
 #
