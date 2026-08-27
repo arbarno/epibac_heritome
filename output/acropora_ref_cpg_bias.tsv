@@ -1,4 +1,4 @@
-gene	observed CpG	expected CpG	CpG bias
+gene	observed cpg	expected_cpg	cpg_bias
 g1	11	13.11	0.8391
 g2	13	66.52	0.1954
 g3	28	46.36	0.604
