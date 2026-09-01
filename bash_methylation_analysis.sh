@@ -148,13 +148,6 @@ done
 # python v3.11.0
 calc_cpg_bias.py ${REF_ASSEMBLY} ${REF_GFF} > /ibex/project/c2208/nanopore/output/acropora_ref_cpg_bias.tsv
 
-# Calculate mean methylation per sample
-# python v3.11.0
-for BED in *.clair3.filt.conservedCpGs.annotated.bed; do
-    SAMPLE_NAME=$(basename "${BED}" .clair3.filt.conservedCpGs.annotated.bed)
-    calc_mean_methylation.py ${REF_ASSEMBLY} ${REF_GFF} ${BED} > ${SAMPLE_NAME}_clair3_mean_meths.tsv
-done
-
 # Tabulate all mean methylation files
 # python v3.11.0
 cd 10x_clair3_filt
