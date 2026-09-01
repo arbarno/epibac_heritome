@@ -920,7 +920,7 @@ dmr.gr
 library(Rsamtools) # v2.26.0
 library(Biostrings) # v2.78.0
 
-genome <- FaFile("acropora_ref.fa")
+genome <- FaFile("acropora_ref_assembly.fa")
 open(genome)
 
 dmr.seqs <- getSeq(genome, dmr.gr)
@@ -983,7 +983,7 @@ bmc.dmrs <- read.table("dss_dmrs_inoculation.txt", header = TRUE, sep = "\t", st
 glm.bmc <- read.delim("glm_bmc_converged_bh.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)[,1] %>% trimws()
 
 # gff file
-gff <- import("acropora_ref.gff")
+gff <- import("acropora_ref_assembly.gff")
 
 dmr.gr <- GRanges(seqnames = bmc.dmrs$chr,
                   ranges = IRanges(start = bmc.dmrs$start, end = bmc.dmrs$end), strand = "*")
@@ -1114,7 +1114,7 @@ library(Rsamtools) # v2.25.0
 library(patchwork) # v1.3.0
 
 # Import the gff data into a GRanges object that can be modified to fit the format of NanoMethViz
-anno <- rtracklayer::import("acropora_ref.gff")
+anno <- rtracklayer::import("acropora_ref_assembly.gff")
 head(anno)
 
 genes <- anno %>%
