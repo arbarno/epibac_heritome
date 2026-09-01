@@ -158,8 +158,8 @@ done
 # Tabulate all mean methylation files
 # python v3.11.0
 cd 10x_clair3_filt
-ALL_FILTERED=$(echo *_mean_meths.tsv)
-tabulate_tsvs.py ${ALL_FILTERED} -k 0 1 -c 3 -v > all_clair3_mean_meths.tsv
+ALL_FILTERED=$(echo *.10x.clair3.filt.conservedCpGs.annotated.bed)
+python3 aggregate_gene_context_counts.py ${ALL_FILTERED} --out-gene-tsv gene_level_counts.tsv --out-context-tsv context_level_counts.tsv
 
 # Tabulate filtered context percentages
 # python v3.11.0
