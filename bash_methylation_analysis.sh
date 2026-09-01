@@ -55,8 +55,8 @@ conda deactivate
 # bedtools/2.30.0 bcftools/1.16
 for BED in *.10x.cpgs.bed; do
     SAMPLE_NAME=$(basename "${BED}" .10x.cpgs.bed)
-    bcftools view -f PASS "${SAMPLE_NAME}_clair3"/merge_output.vcf.gz clair3_pass/"${SAMPLE_NAME}_pass.vcf"
-    bedtools intersect -a "${BED}" -b clair3_pass/"${SAMPLE_NAME}_pass.vcf" -v 10x_clair3_filt/"${SAMPLE_NAME}.10x.clair3.filt.bed"
+    bcftools view -f PASS "${SAMPLE_NAME}_clair3"/merge_output.vcf.gz > clair3_pass/"${SAMPLE_NAME}_pass.vcf"
+    bedtools intersect -a "${BED}" -b clair3_pass/"${SAMPLE_NAME}_pass.vcf" -v > 10x_clair3_filt/"${SAMPLE_NAME}.10x.clair3.filt.bed"
 done
 
 # Go back to just the C positions (from CpGs)
@@ -118,7 +118,7 @@ tabix -s 2 -b 3 -e 3 combined_data_clair3.sorted.tsv.gz
 # Filter individual pileup files by common positions
 cd 10x_clair3_filt
 for BED in *.clair3.filt.Cs.bed.sorted; do
-    SAMPLE_NAME=$(basename "${BED}" .10x.pileup.bed.sorted)
+    SAMPLE_NAME=$(basename "${BED}" .clair3.filt.Cs.bed.sorted)
     bedtools intersect -a ${BED} -b common_positions_clair3.bed > ${SAMPLE_NAME}.clair3.filt.conservedCpGs.bed
 done
 
@@ -148,7 +148,7 @@ done
 # python v3.11.0
 calc_cpg_bias.py ${REF_ASSEMBLY} ${REF_GFF} > /ibex/project/c2208/nanopore/output/acropora_ref_cpg_bias.tsv
 
-# Tabulate all mean methylation files
+# Aggregate methylation data
 # python v3.11.0
 cd 10x_clair3_filt
 ALL_FILTERED=$(echo *.10x.clair3.filt.conservedCpGs.annotated.bed)
@@ -159,4 +159,4 @@ python3 aggregate_gene_context_counts.py ${ALL_FILTERED} --out-gene-tsv gene_lev
 ALL_FILTERED=$(echo *.clair3.filt.conservedCpGs.annotated.bed)
 tabulate_tsvs.py ${ALL_FILTERED} -k 0 1 6 10 -c 4 -v > all_clair3_pct_context.tsv
 sed -i 's/^\t\t\t/scaffold\tpos\tgene\tcontext/' all_clair3_pct_context.tsv && sed -i 's/\.bed//g' all_clair3_pct_context.tsv
-gzip all_filt_pct_context.tsv
+gzip all_clair3_pct_context.tsv
